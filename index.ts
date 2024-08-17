@@ -1,172 +1,156 @@
-interface square {
-    p: {x: number, y: number};
-    w: number;
-    h: number;
-    color: number[];
+type Rectangle = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  color: Array<number>;
+};
+
+function randomColor(): Array<number>{
+  return [
+    Math.floor(Math.random()*255),
+    Math.floor(Math.random()*255),
+    Math.floor(Math.random()*255)
+  ]
 }
 
-const POPULATION_TOTAL = 30;
+function initPopulation(canvas: HTMLCanvasElement, population: Array<Array<Rectangle>>, rectTotal: number, populationTotal: number) {
+  for (let i = 0; i < populationTotal; i++) {
+    let individual: Array<Rectangle> = [];
+    for (let j=0; j < rectTotal; j++) {
+      let rand_x = Math.floor(Math.random()*(canvas.width/2 * 0.9));
+      let rand_y = Math.floor(Math.random()*(canvas.height * 0.9));
+      let w = Math.floor(Math.random()*((canvas.width/2) - rand_x));
+      if (w == 0) {
+        w += Math.floor(((canvas.width/2) - rand_x)/2);
+      }
+      let h = Math.floor(Math.random()*(canvas.height - rand_y));
+      if (h == 0) {
+        h += Math.floor((canvas.height - rand_y)/2);
+      }
+      individual.push({
+        x: rand_x,
+        y: rand_y,
+        width: w,
+        height: h,
+        color: randomColor(),
+      });
+    };
 
-function randomCoord(canvas: HTMLCanvasElement): {x: number, y: number} {
-  return {x: Math.floor(Math.random()*canvas.width), y: Math.floor(Math.random()*canvas.height)};
-}
+    population.push(individual);
+  };
+};
 
-function randomSample(canvas: HTMLCanvasElement, individuals: Array<square>) {
-  individuals.length = 0;
-  let minimun_width = 5;
-  let minimun_height = 5;
-  for (let i = 0; i <  POPULATION_TOTAL; i++) {
-    let initial_point = randomCoord(canvas);
-    let w = Math.floor(Math.random()*(canvas.width/10-minimun_width)) + minimun_width;
-    let h = Math.floor(Math.random()*(canvas.height/10-minimun_height)) + minimun_height;
-    let color = [Math.floor(Math.random()*255), Math.floor(Math.random()*255), Math.floor(Math.random()*255)];
-
-    individuals.push({p: initial_point, w: w, h: h, color: color});
-  }
-}
-
-function drawSample(ctx: CanvasRenderingContext2D, individuals: Array<square>) {
-  individuals.forEach(
-    (v) => {
-      ctx.fillStyle = "rgb(" + v.color[0].toString() + " " + v.color[1].toString() + " " + v.color[2].toString() + ")";
-      ctx.fillRect(v.p.x, v.p.y, v.w, v.h)
-    }
-  )
-}
-
-function drawFrame(canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D, population: square[]) {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  drawSample(ctx, population);
-}
-
-function fit(individuals: Array<square>, ctx: CanvasRenderingContext2D): Array<number[]> {
-  let fitness: number[][] = [];
-
-  individuals.forEach((square, i) => {
-    let targetRGBA = ctx?.getImageData(square.p.x, square.p.y, square.w, square.h).data;
-    let total = 0;
-
-    for (let i=0; i < targetRGBA.length; i += 4) {
-      let diffR = Math.abs(square.color[0] - targetRGBA[i]);
-      let diffG = Math.abs(square.color[1] - targetRGBA[i+1]);
-      let diffB = Math.abs(square.color[2] - targetRGBA[i+2]);
-      let diffA = Math.abs(255 - targetRGBA[i+2]);
-
-      total =+ (diffR + diffG + diffB + diffA)/(255*4);
-    }
-
-    fitness.push([total,i]);
+function fitness(target: ImageData, individual: Array<Rectangle>): number{
+  let image = new Uint8ClampedArray(target.data.length);
+  individual.forEach((v) => {
+    for (let row = v.y; row < v.y+v.height; row++) {
+      for (let col = v.x; col < v.x+v.width; col++) {
+        let redidx = row * (image.length*4) + (col*4);
+        image[redidx] = v.color[0];
+        image[redidx+1] = v.color[1];
+        image[redidx+2] = v.color[2];
+        image[redidx+3] = 255;
+      };
+    };
   })
 
-  return fitness.sort();
+  let total = 0;
+  for (let i=0; i < image.length; i += 4) {
+    let diffR = Math.abs(target.data[i] - image[i])/255;
+    let diffG = Math.abs(target.data[i+1] - image[i+1])/255;
+    let diffB = Math.abs(target.data[i+2] - image[i+2])/255;
+    let diffA = Math.abs(target.data[i+3] - image[i+3])/255;
+
+    total += (diffR + diffG + diffB + diffA)/4;
+  }
+  return total/(target.width*target.height)
 }
 
-function getEpsilon(totalWidth: number, center: number, denominator: number = 10): number {
-  let epsilon = 0;
+function mutColor(center: number): number {
+  let len = 255;
+  let epsilon = center;
 
-  if (Math.random() > 0.8) {
-    if (totalWidth - center < center) {
-      epsilon = (totalWidth - center) / denominator;
-      if (Math.floor(Math.random()*2) == 1) {
-        epsilon *= -1;
-      }
-    } else {
-      epsilon = center / denominator;
-      if (Math.floor(Math.random()*2) == 1) {
-        epsilon *= -1;
-      }
-    }
+  if (len - center < epsilon) {
+    let epslion = len - center
   }
 
-  return Math.floor(epsilon);
+  return Math.floor(Math.random() * (center+epsilon - (center-epsilon)) + (center-epsilon));
 }
 
-function getNextGen(nextGen: square[], population: square[], fitness: number[][], canvas: HTMLCanvasElement) {
-  let top = Math.floor(population.length * 0.1);
-  let bottom = Math.floor(population.length * 0.3);
-  nextGen.length = 0;
+// function getNextGen(target: ImageData, currGen: Array<Array<Rectangle>>, ctx: CanvasRenderingContext2D): Array<ImageData> {
+//   let nextGen: Array<Array<Rectangle>> = [];
+//   let total = currGen.length;
 
-  for (let i = 0; i <= top; i++) {
-    nextGen.push(population[fitness[1][1]]);
-  }
+//   currGen.sort((a, b) => {
+//     return fitness(target, a) - fitness(target, b);
+//   });
 
-  while(nextGen.length < POPULATION_TOTAL) {
-    let parents = [
-      population[Math.floor(Math.random()*(bottom-top+1)) + top+1],
-      population[Math.floor(Math.random()*(bottom-top+1)) + top+1]
-    ];
+//   let top = Math.floor(currGen.length * 0.2);
+//   let bottom = Math.floor(currGen.length * 0.3);
+//   nextGen = currGen.slice(0, top);
+//   currGen = currGen.slice(top, currGen.length - bottom);
 
-    let childWidth = 0;
-    let childHeight = 0;
-    let childColor = [0,0,0];
-    let initial_point = {x: 0, y:0};
+//   while(nextGen.length < total) {
+//     let currentImage = ctx.createImageData(target.width, target.height);
 
-    if (Math.floor(Math.random()*2) == 0) { // crossing
-      initial_point = parents[Math.floor(Math.random()*2)].p;
-      childWidth = parents[Math.floor(Math.random()*2)].w;
-      childHeight = parents[Math.floor(Math.random()*2)].h;
-      childColor = [
-        parents[Math.floor(Math.random()*2)].color[0],
-        parents[Math.floor(Math.random()*2)].color[1],
-        parents[Math.floor(Math.random()*2)].color[2],
-      ];
-    } else { // mutation
-      let mut_parent = parents[Math.floor(Math.random()*2)];
-      initial_point.x = mut_parent.p.x + getEpsilon(canvas.width, mut_parent.p.x);
-      initial_point.y =  mut_parent.p.y + getEpsilon(canvas.height, mut_parent.p.y);
-      childWidth = mut_parent.p.x + mut_parent.w + getEpsilon(canvas.width, mut_parent.p.x + mut_parent.w);
-      childHeight = mut_parent.p.y + mut_parent.h + getEpsilon(canvas.height, mut_parent.p.y + mut_parent.h);
-      childColor = [
-        mut_parent.color[0] + getEpsilon(255, mut_parent.color[0]),
-        mut_parent.color[1] + getEpsilon(255, mut_parent.color[1]),
-        mut_parent.color[2] + getEpsilon(255, mut_parent.color[2]),
-      ];
-    }
+//     if (Math.floor(Math.random()*2) == 0) { // crossing
+//       let a = 0.3;
+//       let p1 = currGen[Math.floor(Math.random()*currGen.length)].data;
+//       let p2 = currGen[Math.floor(Math.random()*currGen.length)].data;
+//       for (let i=0; i < currentImage.data.length; i += 4) {
+//           currentImage.data[i] = a*p1[i] + (1-a) * p2[i];
+//           currentImage.data[i+1] = a*p1[i+1] + (1-a) * p2[i+1];
+//           currentImage.data[i+2] = a*p1[i+2] + (1-a) * p2[i+2];
+//           currentImage.data[i+3] = a*p1[i+3] + (1-a) * p2[i+3];
+//       }
+//     } else { // mutation
+//       let p = currGen[Math.floor(Math.random()*currGen.length)].data;
+//       for (let i=0; i < currentImage.data.length; i += 4) {
+//           currentImage.data[i] = mutColor(p[i]);
+//           currentImage.data[i+1] = mutColor(p[i+1]);
+//           currentImage.data[i+2] = mutColor(p[i+2]);
+//           currentImage.data[i+3] = mutColor(p[i+3]);
+//       }
+//     }
 
-    nextGen.push({
-      p: initial_point,
-      w: childWidth,
-      h: childHeight,
-      color: childColor})
-  }
-}
+//     nextGen.push(currentImage);
+//   }
+
+//   return nextGen;
+// }
 
 window.addEventListener('load', function() {
-  let population: Array<square> = [];
-  let nextGen: Array<square> = [];
-
   const target = new Image();
   target.crossOrigin = 'anonymous';
-  target.src = "https://upload.wikimedia.org/wikipedia/commons/thumb/6/62/Solid_red.svg/480px-Solid_red.svg.png";
+  // target.src = "https://upload.wikimedia.org/wikipedia/commons/thumb/6/62/Solid_red.svg/480px-Solid_red.svg.png";
+  target.src = "https://upload.wikimedia.org/wikipedia/commons/thumb/6/62/Solid_red.svg/240px-Solid_red.svg.png";
 
-  const targetCanvas = <HTMLCanvasElement> document.getElementById("target");
-  const targetCtx = targetCanvas.getContext("2d", {willReadFrequently: true});
-  if (targetCtx == null) {
+  const canvas = <HTMLCanvasElement> document.getElementById("screen");
+  const ctx = canvas.getContext("2d", {willReadFrequently: true});
+  if (ctx == null) {
     throw new Error("Target context null");
   }
+  let targetImData: ImageData;
 
-  const animCanvas = <HTMLCanvasElement> document.getElementById("anim");
-  const animCtx = animCanvas.getContext("2d");
-  if (animCtx == null) {
-    throw new Error("Target context null");
-  }
+  const SQUARE_TOTAL = 10;
+  const POPULATION_TOTAL = 20;
+  let population: Array<Array<Rectangle>> = [];
 
   target.onload = () => {
-    targetCanvas.width = target.naturalWidth;
-    targetCanvas.height = target.naturalHeight;
-    animCanvas.width = target.naturalWidth;
-    animCanvas.height = target.naturalHeight;
+    canvas.width = target.naturalWidth * 2;
+    canvas.height = target.naturalHeight;
 
-    targetCtx.drawImage(target, 0, 0);
+    ctx.drawImage(target, 0, 0);
+    targetImData = ctx.getImageData(0, 0, canvas.width/2, canvas.height);
 
-    randomSample(animCanvas, population);
+    initPopulation(canvas, population, SQUARE_TOTAL, POPULATION_TOTAL);
+    console.log(fitness(targetImData, population[5]));
   }
 
-  window.setInterval(() => {
-    nextGen = [];
-    drawFrame(animCanvas, animCtx, population);
-    let fitness = fit(population, targetCtx);
-    getNextGen(nextGen, population, fitness, animCanvas);
-    population = nextGen;
-  }, 500);
+  // window.setInterval(() => {
+  //   population = getNextGen(targetImData, population, ctx);
+  //   // console.log(fitness(targetImData, population[0]));
+  //   ctx.putImageData(population[0], canvas.width/2, 0);
+  // }, 500);
 });
