@@ -12,8 +12,9 @@ import (
 	"image/color"
 )
 
-const PopCount = 5
+const PopCount = 10
 const PolyCount = 5
+const Generations = 10
 
 type Vertex struct {
 	X int
@@ -28,6 +29,11 @@ type Poly struct {
 type Edge struct {
 	ends  [2]Vertex
 	slope float64
+}
+
+type DiffPair struct {
+	diff float64
+	index int
 }
 
 func randomRegPoly(v int, w int, h int) []Vertex {
@@ -121,7 +127,7 @@ func getNodeList(y int, edges []Edge) []Vertex {
 	return nodes
 }
 
-func drawPoly(edges []Edge, im image.RGBA, col color.RGBA) {
+func drawPoly(edges []Edge, im *image.RGBA, col color.RGBA) {
 	for y := range im.Bounds().Dy() {
 	    nodes := getNodeList(y, edges)
 	    if len(nodes) > 0 && len(nodes) % 2 == 0 {
@@ -172,18 +178,58 @@ func main() {
 		log.Fatal(err)
 	}
 
-	pop := randomPolyPopulation(targetImg.Bounds().Dx(), targetImg.Bounds().Dy(), 3)
+	currGen := randomPolyPopulation(targetImg.Bounds().Dx(), targetImg.Bounds().Dy(), 3)
+	nextGen := make([][]Poly, len(currGen))
 
-	outImg := image.NewRGBA(image.Rectangle{
-		image.Point{0,0},
-		image.Point{targetImg.Bounds().Dx(), targetImg.Bounds().Dy()},
-	})
+	outImg := image.NewRGBA(targetImg.Bounds())
 
-	for _, poly := range pop[0] {
-	    edges := edgesFromPoly(poly)
-	    drawPoly(edges, *outImg, poly.color)
+	for _, poly := range currGen[0] {
+		edges := edgesFromPoly(poly)
+		drawPoly(edges, outImg, poly.color)
 	}
-	fmt.Println(imDiff(targetImg, targetImg))
+
+	for k := 0; k < Generations; k++ {
+		diffs := []DiffPair{}
+
+		for i, sample := range currGen {
+			cmpImg := image.NewRGBA(image.Rectangle{
+				image.Point{0,0},
+				image.Point{targetImg.Bounds().Dx(), targetImg.Bounds().Dy()},
+			})
+
+			for _, poly := range sample {
+				edges := edgesFromPoly(poly)
+				drawPoly(edges, cmpImg, poly.color)
+			}
+
+			diffs = append(diffs, DiffPair{imDiff(targetImg, cmpImg), i})
+		}
+
+		slices.SortFunc(diffs, func(a, b DiffPair) int {
+			if a.diff < b.diff {
+				return -1
+			} else if a.diff >  b.diff {
+				return 1
+			} else {
+				return 0
+			}
+		})
+
+		for i, pair := range diffs {
+			if i < len(diffs)/4 {
+				nextGen[i] = currGen[pair.index]
+			} else if i < len(diffs)/10 * 8 {
+			}
+		}
+
+		copy(currGen, nextGen)
+	}
+
+	for _, poly := range currGen[0] {
+		edges := edgesFromPoly(poly)
+		drawPoly(edges, outImg, poly.color)
+	}
+
 	err = png.Encode(outPath, outImg)
 	if err != nil {
 		log.Fatal(err)
